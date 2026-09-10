@@ -1,0 +1,91 @@
+import asyncio
+import logging
+
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters.command import Command
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, InputMediaPhoto
+
+BOT_TOKEN = "8847359592:AAHhKmrIveYhkMs6tQ914nWPAX_OXIv850c"
+
+logging.basicConfig(level=logging.INFO)
+
+bot = Bot(token=BOT_TOKEN)
+
+dp = Dispatcher()
+
+CARDS = {"photo_1":  ("CartHolder/images/theyn.png",             "информация о правилах тэйна"),
+    "photo_2":  ("CartHolder/images/dozr.png",               "информация о правилах дозра"),
+    "photo_3":  ("CartHolder/images/medic.png",              "информация о правилах медика"),
+    "photo_4":  ("CartHolder/images/grenadier.png",          "информация о правилах гренадера"),
+    "photo_5":  ("CartHolder/images/warrior.png",             "информация о правилах воина"),
+    "photo_6":  ("CartHolder/images/gunner.png",              "информация о правилах ратата"),
+    "photo_7":  ("CartHolder/images/jump_pack.png",           "информация о правилах прыгучки"),
+    "photo_8":  ("CartHolder/images/kinlynk.png",             "информация о правилах кинлинка"),
+    "photo_9":  ("CartHolder/images/kognitaar.png",           "информация о правилах когнитара"),
+    "photo_10": ("CartHolder/images/lugger.png",              "информация о правилах ишака"),
+    "photo_11": ("CartHolder/images/lokatr.png",              "информация о правилах локатора"),
+    "photo_12": ("CartHolder/images/faction_equimpment.png",  "информация о правилах снаряжения фракции"), 
+}
+
+_file_id_cache: dict[str, str] = {}
+
+def get_keyboard() -> InlineKeyboardMarkup:
+    labels = [
+        "theyn", "dozr", "medic", "grenadier", "warrior", "gunner",
+        "jump pack", "kinlynk", "kognitaar", "lugger", "lokatr",
+        "faction equipment rules",
+    ]
+    buttons = [[InlineKeyboardButton(text=label, callback_data=f"photo_{i}")]
+        for i, label in enumerate(labels, start=1)
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    await message.answer(
+        text="Выберите кнопку, чтобы увидеть фотографию:",
+        reply_markup=get_keyboard()
+    )
+
+@dp.callback_query(F.data.startswith("photo_"))
+async def show_photo(callback: types.CallbackQuery):
+    card = CARDS.get(callback.data)
+    if card is None:
+        await callback.answer("Неизвестная карточка.", show_alert=True)
+        return
+ 
+    photo_path, caption_text = card
+    try:
+        media_source = _file_id_cache.get(callback.data) or FSInputFile(photo_path)
+        if callback.message.photo:
+            sent = await callback.message.edit_media(
+                media=InputMediaPhoto(media=media_source, caption=caption_text),
+                reply_markup=get_keyboard(),
+            )
+        else:
+            sent = await callback.message.answer_photo(
+                photo=media_source,
+                caption=caption_text,
+                reply_markup=get_keyboard(),
+            )
+            await callback.message.delete()
+
+        if callback.data not in _file_id_cache:
+            _file_id_cache[callback.data] = sent.photo[-1].file_id
+    except Exception as e:
+        logging.exception("Failed to show photo for %s", callback.data)
+        await callback.answer(
+            f"Ошибка: не удалось загрузить файл ({photo_path}).",
+            show_alert=True,
+        )
+        return
+    await callback.answer()
+
+async def main():
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
